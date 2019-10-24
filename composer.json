@@ -1,0 +1,11 @@
+{
+    "name": "aurexs/proxmox-api",
+    "type": "client",
+    "description": "ProxmoxVE PHP API Status Consumer",
+    "keywords": ["Proxmox", "API", "PHP", "PVE"],
+    "license": "MIT",
+    "require": {
+        "saleh7/proxmox-ve_php_api": "@dev",
+        "php-curl-class/php-curl-class": "^8.1"
+    }
+}

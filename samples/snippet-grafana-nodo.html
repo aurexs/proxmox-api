@@ -1,0 +1,182 @@
+<!-- 
+    Modificar PVE_API = "https://domain.uan.mx/proxmox-api/?n=__NODO__&r="
+    con la url del proyecto.
+    Grafana debe tener en templanting, una variable $NODO con el id del nodo a consumir detalles.
+ -->
+<style>
+    .tabla {
+        display: none;
+        float:left;
+        margin-right:15px;
+    }
+    .tabla th,.tabla td {padding: 2px}
+    .tabla th {min-width: 65px;text-align:right}
+    .tabla .running {color: green}
+    .tabla .stopped {color: red}
+    
+    .NO_PVEAuthTicket {display: none}
+    .VM-name small{color:#777;font-size:1.1rem}
+    .VM-name{text-align:left;border-bottom:1px solid #444;padding-left:25px;color:#FAFAFA}
+</style>
+
+<div id="VM-$NODO">
+    <div class="NO_PVEAuthTicket"></div>
+    <div id="VM-$NODO-name" class="VM-name row-text"><small>cargando...</small></div >
+    <table class="tabla">
+        <tr><th>RAM:</th><td id="VM-$NODO-memory">cpus</td></tr>
+        <tr><th>ROOT:</th><td id="VM-$NODO-rootfs">cpus</td></tr>
+    </table>
+    <table class="tabla">
+        <tr><th>UPTIME:</th><td id="VM-$NODO-uptime">uptime</td></tr>
+        <tr><th>SWAP:</th><td id="VM-$NODO-swap">status</td></tr>
+    </table>
+<div style="clear: both;border-top: 1px solid #444;">
+    <table class="tabla">
+        <tr><th>CPUS:</th><td id="VM-$NODO-cpuinfo">cpus</td></tr>
+        <tr><th>MODEL:</th><td id="VM-$NODO-model">maxmem</td></tr>
+        <tr><th>KERNEL:</th><td id="VM-$NODO-kversion">maxdisk</td></tr>
+        <tr><th>PVE:</th><td id="VM-$NODO-pveversion">maxdisk</td></tr>
+    </table>
+</div>
+<div style="clear: both;border-top: 1px solid #444;">
+    <table class="tabla">
+        <tr><th>API:</th><td><span id="VM-$NODO-api_url"></span></td></tr>
+    </table>
+</div>
+    <br  style="clear:both" />
+</div>
+
+<script>
+(function() {
+    var PVE_API = "https://domain.uan.mx/proxmox-api/?n=__NODO__&r=",
+        PREFIX, NODO, API_URL;
+
+    PVE = {
+        items: ["cpuinfo","model","kversion","pveversion","memory","rootfs","swap","uptime","api_url"],
+        init: function(VMid) {
+            PREFIX = "VM-"+VMid;
+            NODO = ""+VMid;
+            API_URL = PVE_API.replace('__NODO__',NODO);
+
+            $("#"+PREFIX+" .NO_PVEAuthTicket, #"+PREFIX+" .tabla").hide();
+            $.each(PVE.items, function(i, item) {
+                if (item == "name") {
+                    PVE.setItem(PREFIX,item,"cargando...");
+                } else {
+                    PVE.setItem(PREFIX,item,"--");
+                }
+            });
+
+            try {
+                PVE.getStatus(VMid);
+                // $.when(PVE.authOK()).then(PVE.getStatus);
+            } catch (err) {
+                console.log(err);
+            }
+        },
+
+        API: function(request_path, callback) {
+            return $.get(API_URL+request_path)
+                .fail(function(data, e, i) {
+                    console.log(data, e, i);
+                    var txt = data.statusText ? data.statusText : false;
+                    PVE.logError("<b>Error al cargar status</b>"+(txt ? "<br>"+txt : "")+"<br><a href='"+API_URL+request_path+"' target='_BLANK'>"+API_URL+request_path+"</a>", data)
+                });
+        },
+
+        setItem: function(prefix, item, val) {
+            $("#"+prefix+"-"+item).html(val);
+        },
+
+        getStatus: function(VMid) {
+            var request_path = "/nodes/"+VMid+"/status";
+            PVE.API(request_path)
+            .done(function(response) {
+                if (response.data) {
+                    $.each(PVE.items, function(i, item) {
+                        if (response.data[item] !== "undefined") {
+                            var val = response.data[item],
+                                prop, devs=[], nics=[];
+
+                            if ( ~["memory","rootfs","swap"].indexOf(item)  && val) {
+                                if (item == "memory") val = val.total;
+                                if (item == "rootfs") val = val.free;
+                                if (item == "swap") val = val.total;
+                                val = Math.round(val/1024/1024/1024 * 100) / 100 +" GiB";
+                            } else if (item == "uptime" && val) {
+                                val = DateHelper.time_ago_uptime(val);
+                            } else if (item == "cpuinfo") {
+                                PVE.setItem(PREFIX, "model", val.model);
+                                val = val.cpus+" cores - "+val.sockets+" socket ";
+                            } else if (item == "name") {
+                                val = ""+val+"";
+                            } else if (item == "status") {
+                                $("#"+PREFIX+"-"+item).removeClass().addClass(val);
+                                val = "<b>"+val+"</b>";
+                            } else if (item == "api_url") {
+                                val = '<a href="'+API_URL+request_path+'" target="_BLANK">'+request_path+'</a>';
+                            }
+
+                            PVE.setItem(PREFIX, item, val);
+                        }
+                    });
+                    PVE.setItem(PREFIX, "name", "nodo: "+VMid);
+                    $("#"+PREFIX+" .tabla").show();
+                } else {
+                    PVE.logError("<b>Status no trae .data</b>", response)
+                }
+            });
+        },
+
+        logError: function(msg, data) {
+            if (msg) {
+                $("#"+PREFIX+" .NO_PVEAuthTicket").show().html(msg);
+            }
+            console.log(data);
+        }
+    };
+
+    var DateHelper = {
+        // Takes the format of "Jan 15, 2007 15:45:00 GMT" and converts it to a relative time
+        // Ruby strftime: %b %d, %Y %H:%M:%S GMT
+        time_ago_in_words_with_parsing: function(from) {
+            var date = new Date;
+            date.setTime(Date.parse(from));
+            return this.time_ago_in_words(date);
+        },
+
+        time_ago_uptime: function(uptime) {
+            return this.distance_of_time_in_words(uptime*1000, 1000);
+        },
+
+        time_ago_in_words: function(from) {
+            return this.distance_of_time_in_words(new Date, from);
+        },
+
+        distance_of_time_in_words: function(to, from) {
+            var distance_in_seconds = ((to - from) / 1000);
+            var distance_in_minutes = Math.floor(distance_in_seconds / 60);
+            var tense = distance_in_seconds < 0 ? " despues" : "";
+            distance_in_minutes = Math.abs(distance_in_minutes);
+            if (distance_in_minutes == 0) { return 'menos del minuto'+tense; }
+            if (distance_in_minutes == 1) { return 'un minuto'+tense; }
+            if (distance_in_minutes < 45) { return distance_in_minutes + ' mins'+tense; }
+            if (distance_in_minutes < 90) { return 'como una hora'+tense; }
+            if (distance_in_minutes < 1440) { return 'como ' + Math.floor(distance_in_minutes / 60) + ' horas'+tense; }
+            if (distance_in_minutes < 2880) { return 'un día'+tense; }
+            if (distance_in_minutes < 43200) { return Math.floor(distance_in_minutes / 1440) + ' días'+tense; }
+            if (distance_in_minutes < 86400) { return 'como un mes'+tense; }
+            if (distance_in_minutes < 525960) { return Math.floor(distance_in_minutes / 43200) + ' meses'+tense; }
+            if (distance_in_minutes < 1051199) { return 'como un año'+tense; }
+
+            return 'over ' + Math.floor(distance_in_minutes / 525960) + ' años';
+        }
+    };
+
+    $(document).ready(function() {
+        PVE.init("$NODO");
+    });
+
+})();
+
+</script>

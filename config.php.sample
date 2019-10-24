@@ -1,0 +1,19 @@
+<?php
+
+# Mapeo de configuraciones.
+# Usar Key como etiqueta del nodo, Tal cual lo va a solicitar grafana.
+
+$configure = [
+    've1' => [
+        'hostname' => 'pve1.uan.mx',      // Nodo por default
+        'username' => 'auditor',          // Usuario con rol PVEAuditor
+        'password' => 'tupassword',
+        'realm'    => 'pve',                // pve o
+    ],
+    've2' => [
+        'hostname' => 'pve2.uan.mx',      // Nodo por default
+        'username' => 'auditor',          // Usuario con rol PVEAuditor
+        'password' => 'OtroPassword',
+        'realm'    => 'pve',                // pve o
+    ]
+];

@@ -1,0 +1,8 @@
+/config.php
+.DS_Store
+.env
+/vendor/
+node_modules/
+
+*.webp
+
